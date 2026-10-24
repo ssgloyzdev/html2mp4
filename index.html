@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML to MP4</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b0b0f;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .app {
+      width: 100%;
+      max-width: 500px;
+      background: #17171f;
+      padding: 24px;
+      border-radius: 18px;
+      border: 1px solid #30303c;
+    }
+    h1 {
+      font-size: 25px;
+      margin: 0 0 8px;
+    }
+    p {
+      color: #a5a5b5;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    label {
+      display: block;
+      margin: 18px 0 8px;
+      font-size: 14px;
+    }
+    input, button {
+      width: 100%;
+      padding: 13px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    input {
+      background: #22222d;
+      color: #fff;
+      border: 1px solid #393947;
+    }
+    button {
+      border: 0;
+      background: #7c5cff;
+      color: #fff;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 14px;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #status {
+      margin-top: 16px;
+      font-size: 13px;
+      color: #c5baff;
+      overflow-wrap: anywhere;
+    }
+    #preview {
+      width: 100%;
+      margin-top: 16px;
+      border-radius: 10px;
+      background: #08080b;
+      max-height: 260px;
+    }
+    a {
+      color: #b6a5ff;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>HTML to MP4</h1>
+    <p>Upload file HTML, atur durasi rekaman, lalu ekspor video.</p>
+
+    <label for="file">File HTML</label>
+    <input id="file" type="file" accept=".html,.htm">
+
+    <label for="duration">Durasi video (detik)</label>
+    <input id="duration" type="number" min="1" max="300" value="10">
+
+    <label for="fps">FPS</label>
+    <input id="fps" type="number" min="1" max="60" value="30">
+
+    <button id="start">Mulai Ekspor</button>
+
+    <div id="status">Pilih file HTML untuk memulai.</div>
+
+    <video id="preview" controls hidden></video>
+    <a id="download" hidden>Download video</a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    const fileInput = document.getElementById('file');
+    const durationInput = document.getElementById('duration');
+    const fpsInput = document.getElementById('fps');
+    const startButton = document.getElementById('start');
+    const statusBox = document.getElementById('status');
+    const preview = document.getElementById('preview');
+    const download = document.getElementById('download');
+
+    startButton.onclick = async () => {
+      const file = fileInput.files[0];
+      const duration = Number(durationInput.value);
+      const fps = Number(fpsInput.value);
+
+      if (!file) {
+        statusBox.textContent = 'Pilih file HTML terlebih dahulu.';
+        return;
+      }
+
+      if (!Number.isFinite(duration) || duration < 1 || duration > 300) {
+        statusBox.textContent = 'Durasi harus 1 sampai 300 detik.';
+        return;
+      }
+
+      if (!Number.isFinite(fps) || fps < 1 || fps > 60) {
+        statusBox.textContent = 'FPS harus 1 sampai 60.';
+        return;
+      }
+
+      if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
+        statusBox.textContent = 'Browser ini tidak mendukung perekaman video.';
+        return;
+      }
+
+      let mimeType = '';
+      const preferredTypes = [
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=vp9',
+        'video/webm;codecs=vp8',
+        'video/webm'
+      ];
+
+      for (const type of preferredTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+
+      if (!mimeType) {
+        statusBox.textContent = 'Browser tidak mendukung perekaman video yang aman. Gunakan Chrome atau Edge terbaru.';
+        return;
+      }
+
+      startButton.disabled = true;
+      preview.hidden = true;
+      download.hidden = true;
+      let frameUrl = '';
+      let recorder = null;
+      let stream = null;
+      let frame = null;
+
+      try {
+        statusBox.textContent = 'Menyiapkan halaman HTML...';
+        const html = await file.text();
+
+        frame = document.createElement('iframe');
+        frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1280px;height:720px;border:0;overflow:hidden;';
+        frame.setAttribute('sandbox', 'allow-scripts allow-same-origin');
+        document.body.appendChild(frame);
+
+        frame.srcdoc = html;
+
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('Halaman HTML terlalu lama dimuat.')), 10000);
+          frame.onload = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+
+        stream = canvas.captureStream(fps);
+
+        const chunks = [];
+        recorder = new MediaRecorder(stream, { mimeType });
+
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+
+        const finished = new Promise((resolve, reject) => {
+          recorder.onstop = resolve;
+          recorder.onerror = () => reject(new Error('Perekaman gagal.'));
+        });
+
+        recorder.start();
+        const begin = performance.now();
+        const total = duration * 1000;
+
+        await new Promise((resolve) => {
+          function fallbackRender() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '32px Arial';
+            ctx.fillText('HTML Preview', 60, 100);
+          }
+
+          function draw(now) {
+            const elapsed = now - begin;
+            const percent = Math.min(100, Math.floor((elapsed / total) * 100));
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const doc = frame.contentDocument;
+            if (doc && doc.body) {
+              (async () => {
+                try {
+                  const body = doc.body;
+                  const root = doc.documentElement;
+
+                  const sourceWidth = Math.max(root.scrollWidth, body.scrollWidth, 1280);
+                  const sourceHeight = Math.max(root.scrollHeight, body.scrollHeight, 720);
+
+                  const shot = await html2canvas(body, {
+                    width: sourceWidth,
+                    height: sourceHeight,
+                    scale: 1,
+                    backgroundColor: '#ffffff',
+                    useCORS: true,
+                    allowTaint: true,
+                    logging: false
+                  });
+
+                  const scale = Math.min(canvas.width / sourceWidth, canvas.height / sourceHeight);
+                  const drawWidth = sourceWidth * scale;
+                  const drawHeight = sourceHeight * scale;
+                  const offsetX = (canvas.width - drawWidth) / 2;
+                  const offsetY = (canvas.height - drawHeight) / 2;
+
+                  ctx.drawImage(shot, offsetX, offsetY, drawWidth, drawHeight);
+                } catch (error) {
+                  fallbackRender();
+                }
+              })();
+            } else {
+              fallbackRender();
+            }
+
+            statusBox.textContent = 'Merekam: ' + percent + '%';
+
+            if (elapsed < total) {
+              requestAnimationFrame(draw);
+            } else {
+              resolve();
+            }
+          }
+
+          requestAnimationFrame(draw);
+        });
+
+        recorder.stop();
+        await finished;
+
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
+
+        if (frame) {
+          frame.remove();
+        }
+
+        const blob = new Blob(chunks, { type: mimeType });
+        if (!blob.size) {
+          throw new Error('Video kosong.');
+        }
+
+        frameUrl = URL.createObjectURL(blob);
+        preview.src = frameUrl;
+        preview.hidden = false;
+        download.href = frameUrl;
+        download.download = file.name.replace(/\.html?$/i, '') + '.mp4';
+        download.textContent = 'Download MP4';
+        download.style.display = 'inline-block';
+        download.hidden = false;
+
+        statusBox.textContent = 'Selesai. Ukuran video: ' + (blob.size / 1024 / 1024).toFixed(2) + ' MB.';
+      } catch (error) {
+        if (recorder && recorder.state !== 'inactive') {
+          recorder.stop();
+        }
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
+        if (frame) {
+          frame.remove();
+        }
+        statusBox.textContent = error.message || 'Terjadi kesalahan saat membuat video.';
+      } finally {
+        startButton.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
