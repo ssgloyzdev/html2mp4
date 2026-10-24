@@ -2,7 +2,7 @@
 <html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HTML2Video</title>
-<!-- Pustaka untuk merender HTML ke Canvas tanpa tangkapan layar sistem -->
+<!-- Pustaka untuk merender HTML ke Canvas secara presisi per frame -->
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light dark;--bg:#f2f2f7;--card:#fff;--tx:#000;--mu:#8e8e93;--sep:rgba(60,60,67,.18);--ac:#007aff;--fill:rgba(118,118,128,.12);--seg:#fff}
@@ -87,11 +87,10 @@ video{width:100%;border-radius:12px;margin-top:12px}
     <button id="bPrev">Preview</button>
     <button id="bStop">Stop</button>
   </div>
-  <div class="mu" style="margin-top:6px">Perekaman dilakukan secara otomatis langsung dari konten halaman tanpa popup tangkapan layar sistem.</div>
+  <div class="mu" style="margin-top:6px">Perekaman dilakukan secara otomatis frame-by-frame agar hasil video stabil, mulus, dan bisa diputar dengan normal.</div>
   <div id="out"></div>
 </div>
 
-<!-- Kanvas tersembunyi untuk proses perekaman video otomatis -->
 <canvas id="recCanvas" style="display:none"></canvas>
 
 <script>
@@ -230,18 +229,26 @@ async function play(){
 $('bPrev').onclick=()=>{if(html)play()};
 $('bStop').onclick=stop;
 
+// Perekaman Frame-by-Frame (Sinkron & Dijamin Bisa Diputar)
 $('bRec').onclick=async()=>{
   if(!html||recording)return;
-  recording=true;$('bRec').disabled=true;$('out').textContent='Menyiapkan perekaman video...';
+  recording=true;$('bRec').disabled=true;
+  $('out').textContent='Menyiapkan rendering video frame-by-frame...';
 
   const [w,h]=size();
   const canvas=$('recCanvas');
   canvas.width=w;canvas.height=h;
+  const ctx=canvas.getContext('2d');
 
   const fps=+($('fps').value)||30;
-  const stream=canvas.captureStream(fps);
+  const duration=Math.max(1,+$('dur').value||10);
+  const totalFrames=duration*fps;
 
-  const mt=['video/webm;codecs=vp9','video/webm','video/mp4;codecs=avc1'].find(t=>MediaRecorder.isTypeSupported(t));
+  // Gunakan captureStream(0) untuk kontrol manual per frame (mencegah korup/video rusak)
+  const stream=canvas.captureStream(0);
+  const track=stream.getVideoTracks()[0];
+
+  const mt=['video/webm;codecs=vp9','video/webm','video/mp4'].find(t=>MediaRecorder.isTypeSupported(t));
   if(!mt){
     $('out').textContent='Browser tidak mendukung format perekaman video.';
     recording=false;$('bRec').disabled=false;return;
@@ -252,41 +259,60 @@ $('bRec').onclick=async()=>{
   rec.ondataavailable=e=>e.data.size&&ch.push(e.data);
   const done=new Promise(r=>rec.onstop=r);
   rec.start();
-  $('out').textContent='Merekam video secara otomatis...';
 
-  // Loop tangkapan bingkai (frame) ke kanvas via html2canvas secara real-time
-  const captureLoop=async()=>{
-    if(!recording)return;
-    const d=fr.contentDocument;
-    if(d&&d.body&&window.html2canvas){
-      try{
-        await html2canvas(d.body,{
-          canvas:canvas,
-          width:w,
-          height:h,
-          windowWidth:w,
-          windowHeight:h,
-          logging:false,
-          useCORS:true,
-          allowTaint:true
-        });
-      }catch(e){}
-    }
-    if(recording){
-      requestAnimationFrame(captureLoop);
-    }
-  };
+  await load();
+  const wnd=fr.contentWindow;
+  const doc=fr.contentDocument;
 
-  requestAnimationFrame(captureLoop);
-  await play();
+  // Loop rendering setiap frame secara deterministik
+  for(let f=0;f<=totalFrames;f++){
+    if(!recording)break;
+    const t=f/fps;
+
+    $('bar').firstChild.style.width=(f/totalFrames*100)+'%';
+    $('tm').textContent=t.toFixed(1)+' / '+duration.toFixed(1)+' dtk';
+    $('out').textContent=`Merender frame ${f} dari ${totalFrames} (${Math.round(f/totalFrames*100)}%)...`;
+
+    // Terapkan aksi keyframe sesuai waktu t
+    kfs.forEach(k=>{
+      if(k.t<=t){
+        if(k.type==='scroll'){
+          let y=parseFloat(k.val);
+          if(isNaN(y)){const el=find(doc,k.val);if(el)y=el.getBoundingClientRect().top+wnd.scrollY-wnd.innerHeight/3}
+          if(!isNaN(y))wnd.scrollTo(0,y);
+        }
+        if(k.type==='type'){
+          const [sel,txt]=k.val.split('|').map(s=>s.trim());
+          const el=find(doc,sel);
+          if(el){el.value=txt||'';el.dispatchEvent(new Event('input',{bubbles:true}));}
+        }
+      }
+    });
+
+    await new Promise(r=>setTimeout(r,10));
+
+    try{
+      const renderedCanvas=await html2canvas(doc.body,{
+        width:w,height:h,
+        windowWidth:w,windowHeight:h,
+        logging:false,useCORS:true,allowTaint:true
+      });
+      ctx.clearRect(0,0,w,h);
+      ctx.drawImage(renderedCanvas,0,0,w,h);
+    }catch(e){}
+
+    if(track&&track.requestFrame){
+      track.requestFrame();
+    }
+  }
+
   await sleep(300);
-
   recording=false;
   rec.stop();
   await done;
 
   const ext=mt&&mt.startsWith('video/mp4')?'mp4':'webm';
-  const url=URL.createObjectURL(new Blob(ch,{type:ext==='mp4'?'video/mp4':'video/webm'}));
+  const url=URL.createObjectURL(new Blob(ch,{type:mt}));
   $('out').innerHTML=`<video src="${url}" controls playsinline></video><div class="row" style="margin-top:8px"><a href="${url}" download="html2video.${ext}"><button class="p">Unduh .${ext}</button></a></div>`;
   $('bRec').disabled=false;
 };
