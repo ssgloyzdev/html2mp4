@@ -2,6 +2,8 @@
 <html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>HTML2Video</title>
+<!-- Pustaka untuk merender HTML ke Canvas tanpa tangkapan layar sistem -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light dark;--bg:#f2f2f7;--card:#fff;--tx:#000;--mu:#8e8e93;--sep:rgba(60,60,67,.18);--ac:#007aff;--fill:rgba(118,118,128,.12);--seg:#fff}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--card:#1c1c1e;--tx:#fff;--sep:rgba(84,84,88,.6);--ac:#0a84ff;--fill:rgba(118,118,128,.24);--seg:#636366}}
@@ -85,9 +87,12 @@ video{width:100%;border-radius:12px;margin-top:12px}
     <button id="bPrev">Preview</button>
     <button id="bStop">Stop</button>
   </div>
-  <div class="mu" style="margin-top:6px">Rekam memakai tangkapan tab (Chrome/Edge desktop). Pilih “tab ini” lalu izinkan. Hanya area tampilan yang direkam.</div>
+  <div class="mu" style="margin-top:6px">Perekaman dilakukan secara otomatis langsung dari konten halaman tanpa popup tangkapan layar sistem.</div>
   <div id="out"></div>
 </div>
+
+<!-- Kanvas tersembunyi untuk proses perekaman video otomatis -->
+<canvas id="recCanvas" style="display:none"></canvas>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -227,24 +232,63 @@ $('bStop').onclick=stop;
 
 $('bRec').onclick=async()=>{
   if(!html||recording)return;
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){$('out').textContent='Browser ini tidak mendukung perekaman layar. Gunakan Chrome/Edge di laptop/PC.';return}
-  let stream;
-  try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:+$('fps').value},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'})}
-  catch(e){$('out').textContent='Izin rekam ditolak atau diblokir. Coba buka halaman ini di tab sendiri.';return}
-  recording=true;$('bRec').disabled=true;$('out').textContent='Menyiapkan…';
-  const tr=stream.getVideoTracks()[0];let note='';
-  try{if(window.CropTarget){await tr.cropTo(await CropTarget.fromElement(fw))}else note=' (browser tanpa crop: seluruh tab terekam)'}catch(e){note=' (crop gagal: seluruh tab terekam)'}
-  const mt=['video/mp4;codecs=avc1','video/webm;codecs=vp9','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
-  const rec=new MediaRecorder(stream,{mimeType:mt,videoBitsPerSecond:8e6});const ch=[];
+  recording=true;$('bRec').disabled=true;$('out').textContent='Menyiapkan perekaman video...';
+
+  const [w,h]=size();
+  const canvas=$('recCanvas');
+  canvas.width=w;canvas.height=h;
+
+  const fps=+($('fps').value)||30;
+  const stream=canvas.captureStream(fps);
+
+  const mt=['video/webm;codecs=vp9','video/webm','video/mp4;codecs=avc1'].find(t=>MediaRecorder.isTypeSupported(t));
+  if(!mt){
+    $('out').textContent='Browser tidak mendukung format perekaman video.';
+    recording=false;$('bRec').disabled=false;return;
+  }
+
+  const rec=new MediaRecorder(stream,{mimeType:mt,videoBitsPerSecond:8e6});
+  const ch=[];
   rec.ondataavailable=e=>e.data.size&&ch.push(e.data);
   const done=new Promise(r=>rec.onstop=r);
-  rec.start();$('out').textContent='Merekam…'+note;
+  rec.start();
+  $('out').textContent='Merekam video secara otomatis...';
+
+  // Loop tangkapan bingkai (frame) ke kanvas via html2canvas secara real-time
+  const captureLoop=async()=>{
+    if(!recording)return;
+    const d=fr.contentDocument;
+    if(d&&d.body&&window.html2canvas){
+      try{
+        await html2canvas(d.body,{
+          canvas:canvas,
+          width:w,
+          height:h,
+          windowWidth:w,
+          windowHeight:h,
+          logging:false,
+          useCORS:true,
+          allowTaint:true
+        });
+      }catch(e){}
+    }
+    if(recording){
+      requestAnimationFrame(captureLoop);
+    }
+  };
+
+  requestAnimationFrame(captureLoop);
   await play();
-  await sleep(200);rec.stop();tr.stop();await done;
+  await sleep(300);
+
+  recording=false;
+  rec.stop();
+  await done;
+
   const ext=mt&&mt.startsWith('video/mp4')?'mp4':'webm';
   const url=URL.createObjectURL(new Blob(ch,{type:ext==='mp4'?'video/mp4':'video/webm'}));
   $('out').innerHTML=`<video src="${url}" controls playsinline></video><div class="row" style="margin-top:8px"><a href="${url}" download="html2video.${ext}"><button class="p">Unduh .${ext}</button></a></div>`;
-  recording=false;$('bRec').disabled=false;
+  $('bRec').disabled=false;
 };
 </script>
 </body></html>
