@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HTML2Video</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light dark;--bg:#f2f2f7;--card:#fff;--tx:#000;--mu:#8e8e93;--sep:rgba(60,60,67,.18);--ac:#007aff;--fill:rgba(118,118,128,.12);--seg:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#000;--card:#1c1c1e;--tx:#fff;--sep:rgba(84,84,88,.6);--ac:#0a84ff;--fill:rgba(118,118,128,.24);--seg:#636366}}
+:root[data-theme="dark"]{--bg:#000;--card:#1c1c1e;--tx:#fff;--sep:rgba(84,84,88,.6);--ac:#0a84ff;--fill:rgba(118,118,128,.24);--seg:#636366}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0 auto;background:var(--bg);color:var(--tx);font:16px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;padding:16px;max-width:760px;-webkit-font-smoothing:antialiased}
+h1{font-size:34px;line-height:1.1;letter-spacing:-.4px;font-weight:700;margin:8px 0 2px}
+.sub{color:var(--mu);margin:0 0 20px;font-size:15px}
+.sh{font-size:13px;text-transform:uppercase;letter-spacing:.2px;color:var(--mu);margin:20px 16px 7px}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:6px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label{font-size:13px;color:var(--mu);display:flex;flex-direction:column;gap:5px}
+input,select,button{font:inherit;color:var(--tx);background:var(--fill);border:0;border-radius:10px;padding:0 12px;min-height:44px;min-width:0;outline:0}
+input:focus,select:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--ac) 40%,transparent)}
+input[type=file]{padding:9px 10px;font-size:14px;width:100%}
+button{cursor:pointer;font-weight:500;color:var(--ac);transition:opacity .15s,transform .15s}
+button:active{opacity:.55;transform:scale(.97)}
+button.p{background:var(--ac);color:#fff;font-weight:600;flex:1 1 100%;border-radius:12px;min-height:50px}
+button:disabled{opacity:.4}
+.seg{display:flex;background:var(--fill);border-radius:9px;padding:2px;margin-bottom:10px}
+.seg button{flex:1;background:transparent;color:var(--tx);min-height:32px;border-radius:7px;font-size:14px}
+.seg button.on{background:var(--seg);box-shadow:0 1px 3px #0003}
+#stage{display:flex;justify-content:center;padding:12px;background:var(--fill);border-radius:12px;min-height:120px;overflow:hidden}
+#fw{position:relative;background:#fff;overflow:hidden;border-radius:10px;box-shadow:0 6px 24px #0003}
+#fr{border:0;position:absolute;left:0;top:0;transform-origin:0 0;background:#fff}
+#empty{padding:34px 10px;color:var(--mu);text-align:center}
+.kf,.hd{display:grid;grid-template-columns:56px 82px 1fr 50px 34px;gap:6px;margin-bottom:6px}
+.kf input,.kf select{padding:0 6px;width:100%;min-height:38px;font-size:15px}
+.kf button{padding:0;min-height:38px;color:#ff3b30}
+.hd{font-size:12px;color:var(--mu);margin:10px 0 4px 2px}
+#bar{height:4px;background:var(--fill);border-radius:2px;overflow:hidden;margin-top:12px}
+#bar i{display:block;height:100%;width:0;background:var(--ac);border-radius:2px}
+.mu{color:var(--mu);font-size:13px}
+video{width:100%;border-radius:12px;margin-top:12px}
+</style></head><body>
+<h1>HTML2Video</h1>
+<p class="sub">Ubah halaman HTML menjadi video.</p>
+
+<div class="sh">Sumber &amp; tampilan</div>
+<div class="card">
+  <div class="row">
+    <label style="flex:1 1 100%">File HTML<input type="file" id="file" accept=".html,.htm,text/html"></label>
+    <label>Tampilan<select id="dev">
+      <option value="390x844">Ponsel 390×844</option>
+      <option value="768x1024">Tablet 768×1024</option>
+      <option value="1366x768" selected>Laptop 1366×768</option>
+      <option value="1920x1080">PC 1920×1080</option>
+      <option value="custom">Kustom…</option></select></label>
+    <label id="cu" style="display:none">Lebar×Tinggi<input id="cw" value="1280x720" size="9"></label>
+    <label>Durasi (dtk)<input type="number" id="dur" value="10" min="1" max="300" style="width:76px"></label>
+    <label>FPS<select id="fps"><option>24</option><option selected>30</option><option>60</option></select></label>
+  </div>
+</div>
+
+<div class="sh">Editor</div>
+<div class="card">
+  <div class="seg"><button id="bBrowse" class="on">Jelajah</button><button id="bPick">Pilih elemen</button></div>
+  <div class="row" style="margin-bottom:12px;gap:4px">
+    <button id="bScroll">Ambil scroll</button>
+    <button id="bAdd">Tambah keyframe</button>
+  </div>
+  <div id="stage"><div id="empty">Upload file HTML dulu.<br><span class="mu">Mode Jelajah: buka halaman seperti biasa. Mode Pilih: klik elemen untuk jadi keyframe.</span></div>
+    <div id="fw" hidden><iframe id="fr" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe></div></div>
+  <div id="bar"><i></i></div>
+  <div class="mu" id="tm" style="margin-top:4px">0.0 / 10.0 dtk</div>
+</div>
+
+<div class="sh">Keyframe</div>
+<div class="card">
+  <div class="mu">Waktu aksi dijalankan saat video.</div>
+  <div class="hd"><span>Detik</span><span>Aksi</span><span>Target / nilai</span><span>Dur</span><span></span></div>
+  <div id="list"></div>
+  <div class="mu">scroll: angka Y atau selector · klik/hover: selector · ketik: selector=teks (pakai kolom nilai “selector | teks”)</div>
+</div>
+
+<div class="sh">Render</div>
+<div class="card">
+  <div class="row">
+    <button id="bRec" class="p">Rekam Video</button>
+    <button id="bPrev">Preview</button>
+    <button id="bStop">Stop</button>
+  </div>
+  <div class="mu" style="margin-top:6px">Rekam memakai tangkapan tab (Chrome/Edge desktop). Pilih “tab ini” lalu izinkan. Hanya area tampilan yang direkam.</div>
+  <div id="out"></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fr=$('fr'),fw=$('fw');
+let html='',kfs=[],mode='browse',runId=0,timers=[],recording=false;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+const ease=p=>p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+
+function size(){const v=$('dev').value==='custom'?$('cw').value:$('dev').value;const m=v.match(/(\d+)\s*[x×]\s*(\d+)/i);return m?[+m[1],+m[2]]:[1366,768]}
+function layout(){
+  const [w,h]=size();$('cu').style.display=$('dev').value==='custom'?'':'none';
+  const cw=$('stage').clientWidth-20,mh=Math.max(240,innerHeight*.55);
+  const s=Math.min(1,cw/w,mh/h);
+  fw.style.width=w*s+'px';fw.style.height=h*s+'px';
+  fr.style.width=w+'px';fr.style.height=h+'px';fr.style.transform='scale('+s+')';
+}
+['dev','cw'].forEach(i=>$(i).addEventListener('change',()=>{layout()}));
+addEventListener('resize',layout);
+
+$('file').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  html=await f.text();$('empty').hidden=true;fw.hidden=false;layout();await load();
+};
+function load(){return new Promise(r=>{fr.onload=()=>{setup();r()};fr.srcdoc=html+'<!--'+Date.now()+'-->'})}
+
+function selOf(el){
+  if(el.id)return '#'+CSS.escape(el.id);
+  const p=[];let n=el;
+  while(n&&n.nodeType===1&&n.tagName!=='HTML'&&p.length<5){
+    if(n.id){p.unshift('#'+CSS.escape(n.id));break}
+    const sib=[...n.parentNode.children].filter(c=>c.tagName===n.tagName);
+    p.unshift(n.tagName.toLowerCase()+(sib.length>1?':nth-of-type('+(sib.indexOf(n)+1)+')':''));
+    n=n.parentNode;
+  }
+  return p.join('>');
+}
+let hov=null;
+function setup(){
+  const d=fr.contentDocument;if(!d)return;
+  const st=d.createElement('style');
+  st.textContent='#__cur{position:fixed;left:0;top:0;width:22px;height:22px;z-index:2147483647;pointer-events:none;opacity:0;transition:opacity .2s;filter:drop-shadow(0 1px 2px #0006)}.__rip{position:fixed;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:2px solid #0a84ff;background:#0a84ff33;z-index:2147483646;pointer-events:none;animation:__r .5s ease-out forwards}@keyframes __r{to{transform:scale(3.2);opacity:0}}';
+  d.head.appendChild(st);
+  const c=d.createElement('div');c.id='__cur';
+  c.innerHTML='<svg viewBox="0 0 24 24" width="22" height="22"><path d="M4 2l16 9-7 2-3 7z" fill="#111" stroke="#fff" stroke-width="1.5"/></svg>';
+  d.body.appendChild(c);
+  d.addEventListener('mouseover',e=>{if(mode!=='pick')return;if(hov)hov.style.outline=hov.__o||'';hov=e.target;hov.__o=hov.style.outline;hov.style.outline='2px solid #0a84ff'},true);
+  d.addEventListener('click',e=>{
+    if(mode!=='pick')return;e.preventDefault();e.stopPropagation();
+    if(hov)hov.style.outline=hov.__o||'';
+    addKf({type:'click',val:selOf(e.target)});setMode('browse');
+  },true);
+}
+function setMode(m){mode=m;$('bBrowse').classList.toggle('on',m==='browse');$('bPick').classList.toggle('on',m==='pick')}
+$('bBrowse').onclick=()=>setMode('browse');
+$('bPick').onclick=()=>{if(!html)return;setMode('pick')};
+$('bScroll').onclick=()=>{const w=fr.contentWindow;if(!w)return;addKf({type:'scroll',val:String(Math.round(w.scrollY)),d:1})};
+$('bAdd').onclick=()=>addKf({type:'scroll',val:'0',d:1});
+
+function addKf(k){
+  const last=kfs.length?Math.max(...kfs.map(x=>x.t)):0;
+  kfs.push({t:+(kfs.length?last+1:0.5).toFixed(1),type:'click',val:'',d:1,...k});
+  kfs.sort((a,b)=>a.t-b.t);render();
+}
+function render(){
+  const T=['scroll','click','hover','type'];
+  $('list').innerHTML=kfs.map((k,i)=>`<div class="kf" data-i="${i}"><input type="number" step="0.1" min="0" data-k="t" value="${k.t}"><select data-k="type">${T.map(t=>`<option${t===k.type?' selected':''}>${t}</option>`).join('')}</select><input data-k="val" value="${esc(k.val)}" placeholder="selector / Y / sel | teks"><input type="number" step="0.1" min="0" data-k="d" value="${k.d}"><button data-del>✕</button></div>`).join('')||'<div class="mu">Belum ada keyframe.</div>';
+}
+$('list').addEventListener('change',e=>{
+  const row=e.target.closest('.kf');if(!row)return;const i=+row.dataset.i,k=e.target.dataset.k;
+  kfs[i][k]=(k==='t'||k==='d')?(+e.target.value||0):e.target.value;
+  if(k==='t'){kfs.sort((a,b)=>a.t-b.t);render()}
+});
+$('list').addEventListener('click',e=>{
+  if(e.target.dataset.del===undefined)return;
+  kfs.splice(+e.target.closest('.kf').dataset.i,1);render();
+});
+render();
+
+function tween(ms,fn,id){return new Promise(res=>{
+  const t0=performance.now();
+  (function f(n){
+    if(id!==runId)return res();
+    const p=ms<=0?1:Math.min(1,(n-t0)/ms);fn(ease(p));
+    p<1?requestAnimationFrame(f):res();
+  })(t0);
+})}
+function find(d,sel){try{return d.querySelector(sel)}catch(e){return null}}
+async function moveTo(el,id){
+  const d=fr.contentDocument,c=d.getElementById('__cur');if(!el||!c)return;
+  el.scrollIntoView({block:'center',behavior:'instant'});
+  const r=el.getBoundingClientRect(),tx=r.left+r.width/2,ty=r.top+Math.min(r.height/2,30);
+  const sx=parseFloat(c.dataset.x||tx),sy=parseFloat(c.dataset.y||ty);
+  c.style.opacity=1;
+  await tween(500,p=>{c.style.transform=`translate(${sx+(tx-sx)*p}px,${sy+(ty-sy)*p}px)`},id);
+  c.dataset.x=tx;c.dataset.y=ty;return[tx,ty];
+}
+async function act(k,id){
+  const d=fr.contentDocument,w=fr.contentWindow;if(!d)return;
+  if(k.type==='scroll'){
+    let y=parseFloat(k.val);
+    if(isNaN(y)){const el=find(d,k.val);if(!el)return;y=el.getBoundingClientRect().top+w.scrollY-w.innerHeight/3}
+    const y0=w.scrollY;await tween(Math.max(0,k.d)*1000,p=>w.scrollTo(0,y0+(y-y0)*p),id);return;
+  }
+  const [sel,txt]=k.type==='type'?k.val.split('|').map(s=>s.trim()):[k.val.trim()];
+  const el=find(d,sel);if(!el)return;
+  const pos=await moveTo(el,id);if(id!==runId)return;
+  if(k.type==='hover'){['mouseover','mouseenter','mousemove'].forEach(n=>el.dispatchEvent(new MouseEvent(n,{bubbles:true})));return}
+  if(pos){const rp=d.createElement('div');rp.className='__rip';rp.style.left=pos[0]+'px';rp.style.top=pos[1]+'px';d.body.appendChild(rp);setTimeout(()=>rp.remove(),600)}
+  if(k.type==='click'){el.click();return}
+  el.focus();const s=txt||'',n=s.length;let v='';
+  await tween(Math.max(.3,k.d)*1000,p=>{
+    const m=Math.round(p*n);if(s.slice(0,m)===v)return;v=s.slice(0,m);el.value=v;
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  },id);
+}
+function stop(){runId++;timers.forEach(clearTimeout);timers=[]}
+async function play(){
+  stop();const id=runId;setMode('browse');
+  const total=Math.max(1,+$('dur').value||10);
+  await load();if(id!==runId)return;
+  const t0=performance.now();
+  kfs.forEach(k=>timers.push(setTimeout(()=>act(k,id),k.t*1000)));
+  return new Promise(res=>{
+    (function f(n){
+      if(id!==runId)return res(false);
+      const t=(n-t0)/1000;
+      $('bar').firstChild.style.width=Math.min(100,t/total*100)+'%';
+      $('tm').textContent=Math.min(t,total).toFixed(1)+' / '+total.toFixed(1)+' dtk';
+      if(t>=total)return res(true);
+      requestAnimationFrame(f);
+    })(t0);
+  });
+}
+$('bPrev').onclick=()=>{if(html)play()};
+$('bStop').onclick=stop;
+
+$('bRec').onclick=async()=>{
+  if(!html||recording)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){$('out').textContent='Browser ini tidak mendukung perekaman layar. Gunakan Chrome/Edge di laptop/PC.';return}
+  let stream;
+  try{stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:+$('fps').value},audio:false,preferCurrentTab:true,selfBrowserSurface:'include'})}
+  catch(e){$('out').textContent='Izin rekam ditolak atau diblokir. Coba buka halaman ini di tab sendiri.';return}
+  recording=true;$('bRec').disabled=true;$('out').textContent='Menyiapkan…';
+  const tr=stream.getVideoTracks()[0];let note='';
+  try{if(window.CropTarget){await tr.cropTo(await CropTarget.fromElement(fw))}else note=' (browser tanpa crop: seluruh tab terekam)'}catch(e){note=' (crop gagal: seluruh tab terekam)'}
+  const mt=['video/mp4;codecs=avc1','video/webm;codecs=vp9','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  const rec=new MediaRecorder(stream,{mimeType:mt,videoBitsPerSecond:8e6});const ch=[];
+  rec.ondataavailable=e=>e.data.size&&ch.push(e.data);
+  const done=new Promise(r=>rec.onstop=r);
+  rec.start();$('out').textContent='Merekam…'+note;
+  await play();
+  await sleep(200);rec.stop();tr.stop();await done;
+  const ext=mt&&mt.startsWith('video/mp4')?'mp4':'webm';
+  const url=URL.createObjectURL(new Blob(ch,{type:ext==='mp4'?'video/mp4':'video/webm'}));
+  $('out').innerHTML=`<video src="${url}" controls playsinline></video><div class="row" style="margin-top:8px"><a href="${url}" download="html2video.${ext}"><button class="p">Unduh .${ext}</button></a></div>`;
+  recording=false;$('bRec').disabled=false;
+};
+</script>
+</body></html>
